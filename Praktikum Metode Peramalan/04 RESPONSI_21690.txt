@@ -1,0 +1,225 @@
+#NOmor1
+library(MASS)
+data_1 = Data_Responsi_1
+lamda = c()
+for(i in 2:ncol(data_1)){
+  #cek estimasi parameter menggunakan metode MLE
+  fit = fitdistr(unlist(data_1[,i]), 'exponential')
+  est.lambda.mle = unlist(fit$estimate)
+  est.lambda.mle
+  lamda = c(lamda, est.lambda.mle)
+}
+lamda
+
+data_1[,6]=0
+for (i in 1:nrow(data_1)){
+  for (j in 2:5){
+    data_1[i,6] = data_1[i,6] + data_1[i,j]
+  }
+}
+#cek estimasi parameter menggunakan metode MLE
+fit = fitdistr(data_1$...6, 'gamma')
+fit
+
+#Nomor2
+library(lubridate)
+data_2 = Data_Responsi_2
+data_2$Tanggal = as.Date.character(data_2$Tanggal)
+
+last_idx = length(data_2$Tanggal)
+date1=data_2$Tanggal[1]
+date2=data_2$Tanggal[last_idx]
+count_days=interval(ymd(date1),ymd(date2))
+count_days= count_days %/% days(1) +1
+print(count_days)
+
+date3 = '2023-11-02'
+date4 = '2024-12-31'
+count_days_predict=interval(ymd(date3),ymd(date4))
+count_days_predict= count_days_predict %/% days(1) +1
+
+dat_tanggal <- data.frame(DATE = as_date(ymd("2023-11-02"):ymd("2024-12-31")))
+dat_tanggal$hari = wday(dat_tanggal$'DATE', label = TRUE)
+dat_tanggal<-dat_tanggal[!(dat_tanggal$hari=="Mon"),]
+days_predict = nrow(dat_tanggal)
+
+set.seed(474481)
+x = rbinom(days_predict, 1,last_idx/(count_days-floor((count_days)/7)))
+x
+dat_tanggal$label = x
+dat_tanggal<-dat_tanggal[!(dat_tanggal$label==0),]
+
+table = table(data_2$Total)
+prob_table <- table / sum(table) 
+prob_table_cum = cumsum(prob_table)
+
+simulasi.mc = function(x,y,n){
+  #menghitung pdf dan cdf banyaknya permintaan
+  pdf=y/sum(y)
+  cdf=NULL
+  cdf[1]=pdf[1]
+  for(i in 2:length(y)){
+    cdf[i]=cdf[i-1]+pdf[i]
+  }
+  #mencetak pdf dan cdf banyaknya permintaan
+  tabel1=data.frame(permintaan=x,freq=y,pdf,cdf)
+  print(tabel1)
+  #merandom bilangan sebanyak n
+  set.seed(474481) # agar hasil random selalu sama tiap running
+  random=runif(n)
+  cat("\n")
+  cat("Nilai Random: ", round(random,2),"\n")
+  #membandingkan bilangan random dengan interval bilangan
+  random
+  kesimpulan=NULL
+  cat("\n")
+  for(i in 1:n){
+    if(round(random,10)[i]<=0.0003396739){
+      kesimpulan[i]=215
+    }
+    else if(round(random,10)[i]<=0.0042459239){
+      kesimpulan[i]=220
+    }
+    else if(round(random,10)[i]<=0.0149456522){
+      kesimpulan[i]=225
+    }
+    else if(round(random,10)[i]<=0.0473845109){
+      kesimpulan[i]=230
+    }
+    else if(round(random,10)[i]<=0.1063179348){
+      kesimpulan[i]=235
+    }
+    else if(round(random,10)[i]<=0.2206182065){
+      kesimpulan[i]=240
+    }
+    else if(round(random,10)[i]<=0.3724524457){
+      kesimpulan[i]=245
+    }
+    else if(round(random,10)[i]<=0.5504415761){
+      kesimpulan[i]=250
+    }
+    else if(round(random,10)[i]<=0.7255434783){
+      kesimpulan[i]=255
+    }
+    else if(round(random,10)[i]<=0.8490149457){
+      kesimpulan[i]=260
+    }
+    else if(round(random,10)[i]<=0.9354619565){
+      kesimpulan[i]=265
+    }
+    else if(round(random,10)[i]<=0.9784307065){
+      kesimpulan[i]=270
+    }
+    else if(round(random,10)[i]<=0.9933763587){
+      kesimpulan[i]=275
+    }
+    else if(round(random,10)[i]<=0.9986413043){
+      kesimpulan[i]=280
+    }
+    else {
+      kesimpulan[i]=285
+    }
+  }
+  #mencetak tabel ramalan banyaknya permintaan
+  
+  tabel2=data.frame(Hari=c(1:n),Total=kesimpulan)
+  print(tabel2)
+}
+permintaan=c("215","220","225","230","235","240","245","250","255","260","265",
+             "270","275","280","285")
+freq=c(2,23,63,191,347,673,894,1048,1031,727,509,253,88,31,8)
+n=nrow(dat_tanggal)
+data = simulasi.mc(permintaan,freq,n)
+dat_tanggal$Total = data$Total
+
+data_predict = data.frame(data$Total)
+for (i in 2:8){
+  likelihood <- function(params) {
+    mu <- params[1]
+    sigma <- params[2]
+    
+    # Calculate negative log-likelihood
+    neg_log_likelihood <- -sum(dnorm(unlist(data_2[,i]), mean = mu, sd = sigma, log = TRUE))
+    
+    return(neg_log_likelihood)
+  }
+  
+  # Initial parameter values
+  initial_params <- c(mean(unlist(data_2[,i])), sd(unlist(data_2[,i])))
+  
+  # Use Newton-Raphson optimization to find parameters
+  result <- optim(par = initial_params, fn = likelihood, method = "BFGS")
+  
+  # Extract results
+  mu_est <- result$par[1]
+  sigma_est <- result$par[2]
+  
+  #making new column in data frame
+  data_predict[,i] = 0
+  set.seed(474481)
+  random = rnorm(n, mean = mu_est, sd = sigma_est)
+  for (d in 1:n){
+    data_predict[d,i] = random[d]
+  }
+}
+
+for (i in 1:n){
+  total = 0
+  for (j in 2:8){
+    total = total + exp(round(data_predict[i,j],1))
+  }
+  for (j in 2:8) {
+    data_predict[i,j] = round(exp(round(data_predict[i,j],1))/total*data_predict[i,1],0)
+  }
+}
+df = data.frame(Tanggal = dat_tanggal$DATE, Megaraya = data_predict$V2, Gemaraya = data_predict$V3, 
+                Indaraya = data_predict$V4, Suryaraya = data_predict$V5, Jalaraya = data_predict$V6, 
+                Baharaya = data_predict$V7, Syaharaya = data_predict$V8, Total = data_predict$data.Total)
+
+library(writexl)
+write_xlsx(df,"E:\RESPONSI_21690.xlsx")
+
+#NOMOR3
+library(dplyr)
+data1=Data_Responsi_3a
+data2=Data_Responsi_3b
+
+set.seed(483096)
+data1 = data1 %>% distinct(ID, .keep_all = TRUE)
+data2 = data2 %>% distinct(ID, .keep_all = TRUE)
+
+View(data3)
+data3 = merge(data1, data2, by = "ID")
+
+filter(data3, bedrooms>3) %>% group_by(city) %>%
+  summarise(mean_price = mean(price)) %>% arrange(desc(mean_price))
+
+mean_price = mean(data3$price)
+filter(data3, price>mean_price) %>% group_by(city) %>%
+  summarise(mean_sqft_lot = mean(sqft_lot)) %>% arrange((mean_sqft_lot))
+
+mean_sqft_lot = mean(data3$sqft_lot)
+med_sqft_live = median(data3$sqft_living)
+
+passed = filter(data3, sqft_lot>mean_sqft_lot, sqft_living<med_sqft_live, bedrooms>2, price>mean_price) 
+nrow(passed)
+
+#NOMOR4
+library(lpSolve)
+
+C = c(1,1,1,1,1,1,1)
+
+A = matrix(c(1,0,0,1,1,1,1,
+      1,1,0,0,1,1,1,
+      1,1,1,0,0,1,1,
+      1,1,1,1,0,0,1,
+      1,1,1,1,1,0,0,
+      0,1,1,1,1,1,0,
+      0,0,1,1,1,1,1),nrow=7)
+
+B = c(17,13,15,19,14,16,11)
+tanda = c(rep(">=", 7))
+minimum = lp('min', C, A, tanda, B, all.int = TRUE)
+minimum
+minimum$solution
+

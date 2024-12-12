@@ -1,0 +1,120 @@
+library(ggplot2)
+library(forecast)
+library(tseries)
+library(lmtest)
+library(dplyr)
+
+# Load the data
+data<-Biomass_Energy
+data = ts(data[2], start=(2011),freq = 12)
+
+autoplot(data)+xlab("Waktu (Tahun)") +
+  ylab("Energy") +
+  ggtitle("Plot Data Asli") + geom_point()
+
+adf.test(data)
+
+#Transforming Data
+##Checking the Number of Differences Required
+ndiffs(log(data),"adf")
+
+#Differencing the Data
+##Diff 1
+ddif1 = diff(data, differences=1)
+adf.test(ddif1)
+autoplot(ddif1)
+
+#Diff 1 with Log-Trans
+dtrans1 = diff(log(data), differences=1)
+adf.test(dtrans1)
+autoplot(dtrans1)
+
+#Membuat Plot ACF dan PACF
+ggAcf(ddif1,lag.max = 12) + ggtitle("ACF")
+ggPacf(ddif1,lag.max = 12) + ggtitle("PACF")
+
+# looping the models save in data frame
+model<-c("Model","Parameter","P-Value","Signifikansi")
+for (p in 0:4) {
+  for (d in 1:1) {
+    for (q in 0:4) {
+      if (4-p == 0 && 4-q == 0){
+        break
+      }
+      c = Arima(data,order=c(4-p,d,4-q),include.constant = T, lambda = 0)
+      
+      for (i in 1:nrow(coeftest(c))){
+        if (coeftest(c)[i,4] < 0.05){
+          new_row = c(paste("Model ARIMA(",4-p,",",d,",",4-q,") dengan konstanta"), rownames(coeftest(c))[i], coeftest(c)[i,4], "Signifikan")
+          model<-rbind(model, new_row)
+        }
+        if (coeftest(c)[i,4] >= 0.05){
+          new_row = c(paste("Model ARIMA(",4-p,",",d,",",4-q,") dengan konstanta"), rownames(coeftest(c))[i], coeftest(c)[i,4], "Tidak signifikan")
+          model<-rbind(model, new_row)
+        }
+      }
+      
+      t = Arima(data,order=c(4-p,d,4-q),include.constant = F, lambda = 0)
+      for (i in 1:nrow(coeftest(t))){
+        if (coeftest(t)[i,4] < 0.05){
+          new_row = c(paste("Model ARIMA(",4-p,",",d,",",4-q,") tanpa konstanta"), rownames(coeftest(t))[i], coeftest(t)[i,4], "Signifikan")
+          model<-rbind(model, new_row)
+        }
+        if (coeftest(t)[i,4] >= 0.05){
+          new_row = c(paste("Model ARIMA(",4-p,",",d,",",4-q,") tanpa konstanta"), rownames(coeftest(t))[i], coeftest(t)[i,4], "Tidak signifikan")
+          model<-rbind(model, new_row)
+        }
+      }
+    }
+  }
+}
+model 
+
+# Diagnostic Checking
+tc411 = Arima(data,order=c(4,1,1),include.constant = F, lambda = 0)
+tc410 = Arima(data,order=c(4,1,0),include.constant = F, lambda = 0)
+tc314 = Arima(data,order=c(3,1,4),include.constant = F, lambda = 0)
+tc310 = Arima(data,order=c(3,1,0),include.constant = F, lambda = 0)
+tc110 = Arima(data,order=c(1,1,0),include.constant = F, lambda = 0)
+tc011 = Arima(data,order=c(0,1,1),include.constant = F, lambda = 0)
+
+list_models = list(tc411, tc410, tc314, tc310, tc110, tc011)
+diagnostic_checking = data.frame(Model = character(), Autocorrelation = character(), Homokesdastisitas = character(), Normality = character())
+for (i in 1:length(list_models)){
+  Box.test(list_models[[i]]$residuals,type="Ljung") #uji autokorelasi
+  Box.test((list_models[[i]]$residuals)^2,type="Ljung") #uji homoskedastisitas
+  jarque.bera.test(list_models[[i]]$residuals) #uji normalitas
+  checkresiduals(list_models[[i]])
+  
+  if (Box.test(list_models[[i]]$residuals,type="Ljung")$p.value > 0.05){
+    Autocorrelation = "Tidak ada autokorelasi"
+  } else { Autocorrelation = "Ada autokorelasi"}
+  if (Box.test((list_models[[i]]$residuals)^2,type="Ljung")$p.value > 0.05){
+    Homokesdastisitas = "Residaul bersifat homoskedastik"
+  } else { Homokesdastisitas = "Residual tidak homoskedastik"}
+  if (jarque.bera.test(list_models[[i]]$residuals)$p.value > 0.05){
+    Normality = "Residual berdistribusi normal"
+  } else { Normality = "Residual tidak berdistribusi normal"}
+  row = c(Model = paste(list_models[[i]]), Autocorrelation, Homokesdastisitas, Normality)
+  diagnostic_checking = rbind(diagnostic_checking, row)
+  
+}
+diagnostic_checking
+
+
+model_terbaik = data.frame(Model = character(), Loglik = numeric(), AIC = numeric(), BIC = numeric())
+
+for (i in 1:length(list_models)){
+  best = data.frame(Model = paste("tc", list_models[[i]]), LogLik = logLik(list_models[[i]])[1], AIC = AIC(list_models[[i]])[1], BIC = BIC(list_models[[i]])[1])
+  model_terbaik = rbind(model_terbaik, best)
+}
+model_terbaik
+
+autoplot(tc411$x, col="darkblue") +
+  autolayer(fitted(tc411), series = "Data Ramalan") +
+  ylab("Energy") +
+  ggtitle("Plot Data Asli vs Ramalan")
+
+#predict 3
+accuracy(tc411)
+forecast(tc411, h=3)
